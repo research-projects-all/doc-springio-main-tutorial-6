@@ -26,11 +26,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # --- Bootstrap Gradle wrapper if missing ---
+      # Bootstrap Gradle wrapper if it's missing in repo
       - name: Bootstrap Gradle wrapper (if absent)
         if: ${{ hashFiles('gradlew') == '' }}
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
           GRADLE_VERSION=8.7
           curl -sL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o gradle.zip
           unzip -q gradle.zip -d /tmp/gradle
@@ -48,9 +49,6 @@ jobs:
           languages: java
           build-mode: manual
 
-      # If you keep pom.xml at repo root, Gradle and Maven can conflict.
-      # Either move pom.xml out of root OR just build with Gradle explicitly (below),
-      # which is enough for CodeQL to use the Gradle extraction.
       - name: Build with Gradle
         run: |
           ./gradlew --version
