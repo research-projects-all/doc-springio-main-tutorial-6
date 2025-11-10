@@ -1,16 +1,9 @@
 name: CodeQL
-
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  schedule:
-    - cron: '0 6 * * 0'
+  push: { branches: [ main ] }
+  pull_request: { branches: [ main ] }
 
 env:
-  #  CHANGE THIS if your Gradle project is not at repo root.
-  # For example: myproject-gradle
   PROJECT_DIR: .
 
 jobs:
@@ -20,21 +13,11 @@ jobs:
       actions: read
       contents: read
       security-events: write
-
     defaults:
       run:
         working-directory: ${{ env.PROJECT_DIR }}
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Show project tree (quick sanity check)
-        run: |
-          echo "Repository root:"
-          ls -la
-          echo "Project dir ($PROJECT_DIR):"
-          ls -la "${PROJECT_DIR}"
+      - uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -43,19 +26,16 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      # Bootstrap Gradle wrapper if missing in PROJECT_DIR
       - name: Bootstrap Gradle wrapper (if absent)
         if: ${{ hashFiles(format('{0}/gradlew', env.PROJECT_DIR)) == '' }}
         shell: bash
         run: |
           set -euo pipefail
-          GRADLE_VERSION=8.7
-          curl -sL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o gradle.zip
+          V=8.7
+          curl -sL "https://services.gradle.org/distributions/gradle-${V}-bin.zip" -o gradle.zip
           unzip -q gradle.zip -d /tmp/gradle
-          /tmp/gradle/gradle-${GRADLE_VERSION}/bin/gradle --version
-          /tmp/gradle/gradle-${GRADLE_VERSION}/bin/gradle wrapper --gradle-version ${GRADLE_VERSION} --distribution-type bin
+          /tmp/gradle/gradle-${V}/bin/gradle wrapper --gradle-version ${V} --distribution-type bin
           rm -f gradle.zip
-          echo "Wrapper generated in $PWD"
 
       - name: Make wrapper executable
         run: chmod +x ./gradlew
@@ -66,15 +46,10 @@ jobs:
           languages: java
           build-mode: manual
 
-      #  This is what CodeQL watches. It must run in PROJECT_DIR and actually compile sources.
       - name: Build with Gradle
         run: |
           ./gradlew --version
-          ./gradlew clean build -x test --no-daemon --stacktrace
-          echo "Classes produced under:"
-          find build -type d -name classes -print || true
-          echo "Java class files count:"
-          find build -type f -name "*.class" | wc -l
+          ./gradlew clean build -x test --no-daemon
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
