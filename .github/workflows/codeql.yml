@@ -6,11 +6,10 @@ on:
   pull_request:
     branches: [ main ]
   schedule:
-    - cron: '0 6 * * 0' # weekly
+    - cron: '0 6 * * 0'
 
 jobs:
   analyze:
-    name: Analyze (Java)
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -26,23 +25,34 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
 
-      # Optional but speeds up Gradle builds and ensures wrapper validation
-      - name: Gradle build action
-        uses: gradle/actions/setup-gradle@v3
+      # --- Bootstrap Gradle wrapper if missing ---
+      - name: Bootstrap Gradle wrapper (if absent)
+        if: ${{ hashFiles('gradlew') == '' }}
+        run: |
+          set -e
+          GRADLE_VERSION=8.7
+          curl -sL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o gradle.zip
+          unzip -q gradle.zip -d /tmp/gradle
+          /tmp/gradle/gradle-${GRADLE_VERSION}/bin/gradle --version
+          /tmp/gradle/gradle-${GRADLE_VERSION}/bin/gradle wrapper --gradle-version ${GRADLE_VERSION} --distribution-type bin
+          rm -f gradle.zip
+          echo "Generated wrapper files."
+
+      - name: Make wrapper executable
+        run: chmod +x ./gradlew
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: java
-          # We'll run the build ourselves to avoid 'build-mode: none'
           build-mode: manual
 
-      # **The actual Gradle build** (skip tests if they’re flaky/slow)
+      # If you keep pom.xml at repo root, Gradle and Maven can conflict.
+      # Either move pom.xml out of root OR just build with Gradle explicitly (below),
+      # which is enough for CodeQL to use the Gradle extraction.
       - name: Build with Gradle
         run: |
-          chmod +x ./gradlew
           ./gradlew --version
           ./gradlew clean build -x test
 
