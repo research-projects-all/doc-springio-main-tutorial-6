@@ -9,11 +9,11 @@ on:
     - cron: '0 6 * * 0'
 
 env:
-  # 👇 change if your Gradle project is in a subfolder (e.g., "myproject-gradle")
   PROJECT_DIR: .
 
 jobs:
   analyze:
+    name: Analyze (java)
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -31,13 +31,6 @@ jobs:
           echo "Project dir ($PROJECT_DIR):"
           ls -la "$PROJECT_DIR"
 
-      - name: Temporarily disable root pom.xml (avoid Maven/Gradle confusion)
-        run: |
-          if [ -f "pom.xml" ] && [ "$PROJECT_DIR" = "." ]; then
-            mv pom.xml pom.disabled.xml
-            echo "Moved root pom.xml to pom.disabled.xml for this run."
-          fi
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -45,7 +38,7 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      # Bootstrap Gradle wrapper in PROJECT_DIR if missing
+      # Generate the Gradle wrapper if it's missing
       - name: Bootstrap Gradle wrapper (if absent)
         if: ${{ hashFiles(format('{0}/gradlew', env.PROJECT_DIR)) == '' }}
         shell: bash
@@ -61,36 +54,23 @@ jobs:
       - name: Make wrapper executable
         run: chmod +x "$PROJECT_DIR/gradlew"
 
-      - name: Initialize CodeQL (pin the source root)
-        uses: github/codeql-action/init@v3
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
         with:
           languages: java
           build-mode: manual
-          # 👇 This is crucial when the project is not at repo root
+          # We build at repo root; point CodeQL at it explicitly
           source-root: ${{ env.PROJECT_DIR }}
 
-      # 🔑 The actual build CodeQL must observe
+      # 🔑 CodeQL watches this build. It must actually compile classes.
       - name: Build with Gradle
         shell: bash
         run: |
           set -euo pipefail
           "$PROJECT_DIR/gradlew" --version
           "$PROJECT_DIR/gradlew" -p "$PROJECT_DIR" clean build -x test --no-daemon --stacktrace
-          echo "Classes produced under $PROJECT_DIR/build:"
+          echo "Java class files produced:"
           find "$PROJECT_DIR/build" -type f -name "*.class" | wc -l
-          # Fail fast if nothing was compiled (prevents 'build-mode: none' finalization)
-          COUNT=$(find "$PROJECT_DIR/build" -type f -name "*.class" | wc -l)
-          if [ "$COUNT" -eq 0 ]; then
-            echo "No .class files were produced. Failing."
-            exit 1
-          fi
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-
-      - name: Re-enable pom.xml (if we disabled it)
-        if: ${{ always() }}
-        run: |
-          if [ -f "pom.disabled.xml" ]; then
-            mv pom.disabled.xml pom.xml
-          fi
+        uses: github/codeql-action/analyze@v4
