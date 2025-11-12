@@ -1,57 +1,49 @@
-# .github/workflows/codeql.yml
-name: CodeQL (Gradle CI build)
+
+name: CodeQL
 
 on:
-  push: { branches: [ main ] }
-  pull_request: { branches: [ main ] }
-
-env:
-  PROJECT_DIR: .
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  schedule:
+    - cron: '0 9 * * 1' # Weekly
 
 jobs:
   analyze:
+    name: Analyze (java-kotlin)
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
       security-events: write
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: '17'
-          cache: gradle
 
-      # Generate wrapper if missing (no local action needed)
-      - name: Bootstrap Gradle wrapper (if absent)
-        if: ${{ hashFiles(format('{0}/gradlew', env.PROJECT_DIR)) == '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          V=8.7
-          curl -sSLo gradle.zip "https://services.gradle.org/distributions/gradle-${V}-bin.zip"
-          unzip -q gradle.zip -d /tmp/gradle
-          /tmp/gradle/gradle-${V}/bin/gradle -p "$PROJECT_DIR" wrapper --gradle-version ${V} --distribution-type bin
-          rm -f gradle.zip
-
-      - name: Make wrapper executable
-        run: chmod +x "$PROJECT_DIR/gradlew"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
-          languages: java
-          build-mode: manual
-          source-root: ${{ env.PROJECT_DIR }}
+          languages: java-kotlin
+          # Focus on security queries; change to 'security-and-quality' if you also want maintainability rules.
+          queries: security-extended
 
-      - name: Build with Gradle (what CodeQL watches)
+      # Build the project so CodeQL can create a database
+      - name: Build with Gradle
         run: |
-          "$PROJECT_DIR/gradlew" -p "$PROJECT_DIR" clean build -x test --no-daemon --stacktrace
-          # sanity: ensure classes exist
-          find "$PROJECT_DIR/build" -type f -name "*.class" | wc -l
+          gradle build -x test
 
-      - name: Analyze
+      - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:java"
